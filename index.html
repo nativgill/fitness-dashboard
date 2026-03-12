@@ -21,7 +21,7 @@
     .card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:14px;box-shadow:0 1px 3px rgba(15,23,42,.04)}
     .title{font-size:28px;font-weight:800}.sub{color:#dbeafe;font-size:14px;margin-top:4px}.muted{color:var(--muted)}
     .stat{background:rgba(255,255,255,.1);border-radius:18px;padding:12px}.stat .big{font-size:26px;font-weight:800}
-    .tabs{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:6px;position:sticky;top:8px;z-index:10}
+    .tabs{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:6px;position:sticky;top:8px;z-index:10}
     .tab{border:0;background:transparent;padding:10px 8px;border-radius:14px;font-weight:700;color:#475569}.tab.active{background:var(--accent);color:#fff}
     .hidden{display:none} h2,h3{margin:0} .h2{font-size:20px;font-weight:800}.h3{font-size:16px;font-weight:800}
     input,textarea,select{width:100%;padding:11px 12px;border:1px solid #cbd5e1;border-radius:14px;background:#fff;color:var(--text);font:inherit}
@@ -58,6 +58,7 @@
       <button class="tab" data-tab="week">Week</button>
       <button class="tab" data-tab="progress">Progress</button>
       <button class="tab" data-tab="predict">Predict</button>
+      <button class="tab" data-tab="mode">Mode</button>
       <button class="tab" data-tab="supps">Supplements</button>
       <button class="tab" data-tab="share">Share</button>
     </div>
@@ -144,7 +145,43 @@
           <div class="card"><div class="small">Projected body-fat range</div><div class="big" id="predBodyFat">—</div></div>
         </div>
         <div class="spacer"></div>
+        <div class="grid g3">
+          <div class="card"><div class="small">Week progress score</div><div class="big" id="weekScore">—</div></div>
+          <div class="card"><div class="small">Workout progression</div><div class="big" id="progressionHint">—</div></div>
+          <div class="card"><div class="small">Current mode</div><div class="big" id="currentModeLabel">Cut</div></div>
+        </div>
+        <div class="spacer"></div>
         <div class="card"><div class="h3">Coach note</div><div class="spacer"></div><div id="predCoach" class="muted"></div></div>
+      </div>
+    </section>
+
+    <section id="mode" class="panel hidden">
+      <div class="spacer"></div>
+      <div class="card">
+        <div class="h2">Vacation / Deload Mode</div>
+        <div class="muted small">Use this for your 1–17 May holiday and the return-to-training ramp-up.</div>
+        <div class="spacer"></div>
+        <div class="grid g3">
+          <div class="card">
+            <div class="h3">Current mode</div>
+            <div class="spacer"></div>
+            <select id="modeSelect">
+              <option value="cut">Cut</option>
+              <option value="holiday">Holiday</option>
+              <option value="ramp">Ramp-up</option>
+            </select>
+          </div>
+          <div class="card">
+            <div class="h3">Holiday guidance</div>
+            <div class="spacer"></div>
+            <div class="small">Steps: 8k daily<br>Protein: 130g+ daily<br>Training: optional walking/swimming only<br>Calories: around maintenance</div>
+          </div>
+          <div class="card">
+            <div class="h3">Ramp-up guidance</div>
+            <div class="spacer"></div>
+            <div class="small">Week 1 back: 3 lighter sessions at ~60–70% load<br>Week 2 back: resume full split at ~85–90% of previous loads</div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -225,7 +262,7 @@ const $ = (id)=>document.getElementById(id);
 const fmt = d => d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 const dayData = i => { const d=new Date(START); d.setDate(START.getDate()+i); return {date:d,day:d.toLocaleDateString('en-GB',{weekday:'long'}),week:Math.floor(i/7)+1}; };
 const exLog = (dayName,xs) => xs.map(name=>({name,sets:Array.from({length:4},(_,idx)=>({weight:(PREFILL[dayName]?.[name]?.[idx]?.[0])||'',reps:(PREFILL[dayName]?.[name]?.[idx]?.[1])||''}))}));
-function initialState(){ const days={}; for(let i=0;i<DAYS;i++){ const {day}=dayData(i); days[i]={ meals:MEALS[day][1].map(([name,details,macros])=>({name,details,macros,done:false})), exercises:exLog(day,WORKOUTS[day][1]), notes:'', trainerNotes:'', habit:{sleep:'',water:'',steps:''}, checkIn:{weight:'',waist:''}, photos:[] }; } return {userName:'',trainerName:'',selectedDay:0,reminder:'Weigh in Monday morning • Creatine daily • Protein target 190–200g • 8k–12k steps',days}; }
+function initialState(){ const days={}; for(let i=0;i<DAYS;i++){ const {day}=dayData(i); days[i]={ meals:MEALS[day][1].map(([name,details,macros])=>({name,details,macros,done:false})), exercises:exLog(day,WORKOUTS[day][1]), notes:'', trainerNotes:'', habit:{sleep:'',water:'',steps:''}, checkIn:{weight:'',waist:''}, photos:[] }; } return {userName:'',trainerName:'',selectedDay:0,mode:'cut',reminder:'Weigh in Monday morning • Creatine daily • Protein target 190–200g • 8k–12k steps',days}; }
 let state = (()=>{ try { return JSON.parse(localStorage.getItem(KEY)) || initialState(); } catch { return initialState(); } })();
 function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
 function dl(name, content, type='text/plain;charset=utf-8'){ const b=new Blob([content],{type}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download=name; a.click(); URL.revokeObjectURL(u); }
@@ -257,10 +294,55 @@ function drawSmoothChart(canvasId,key,label){ const c=$(canvasId), ctx=c.getCont
   pts.forEach(([x,y],i)=>{ ctx.fillStyle='#0f172a'; ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#334155'; const val=data.find((d,idx)=>pts[i][0]===X(idx)).y; ctx.fillText(String(val),x-8,y-8); });
 }
 function renderCharts(){ drawSmoothChart('weightChart','weight','Weight'); drawSmoothChart('waistChart','waist','Waist'); }
-function renderPrediction(){ const weights=Array.from({length:WEEKS},(_,i)=>Number(state.days[i*7].checkIn.weight)||null).filter(v=>v!==null); let projected=START_WEIGHT, coach='Enter at least 2 weekly weigh-ins for a useful projection.'; if(weights.length>=2){ const first=weights[0], last=weights[weights.length-1]; const weeksObserved=Math.max(1,weights.length-1); const weeklyRate=(first-last)/weeksObserved; const remaining=(WEEKS-1)-weeksObserved; projected=last-(weeklyRate*remaining); const loss=START_WEIGHT-projected; const estBf=Math.max(15, START_BF - (loss*0.9)); if(weeklyRate<0.4) coach='Your trend is slower than target. Tighten calorie adherence, steps, and alcohol control before adding more HIIT.'; else if(weeklyRate>1.1) coach='Your trend is very fast. Protect recovery and strength by keeping protein high and monitoring fatigue.'; else coach='Your trend is on track for a strong fat-loss phase. Keep the plan steady and avoid unnecessary changes.'; $('predBodyFat').textContent = estBf.toFixed(1)+'–'+Math.min(estBf+1,20).toFixed(1)+'%'; } else { $('predBodyFat').textContent='—'; }
+function renderPrediction(){
+  const weights=Array.from({length:WEEKS},(_,i)=>Number(state.days[i*7].checkIn.weight)||null).filter(v=>v!==null);
+  let projected=START_WEIGHT, coach='Enter at least 2 weekly weigh-ins for a useful projection.';
+  if(weights.length>=2){
+    const first=weights[0], last=weights[weights.length-1];
+    const weeksObserved=Math.max(1,weights.length-1);
+    const weeklyRate=(first-last)/weeksObserved;
+    const remaining=(WEEKS-1)-weeksObserved;
+    projected=last-(weeklyRate*remaining);
+    const loss=START_WEIGHT-projected;
+    const estBf=Math.max(15, START_BF - (loss*0.9));
+    if(weeklyRate<0.4) coach='Your trend is slower than target. Tighten calorie adherence, steps, and alcohol control before adding more HIIT.';
+    else if(weeklyRate>1.1) coach='Your trend is very fast. Protect recovery and strength by keeping protein high and monitoring fatigue.';
+    else coach='Your trend is on track for a strong fat-loss phase. Keep the plan steady and avoid unnecessary changes.';
+    $('predBodyFat').textContent = estBf.toFixed(1)+'–'+Math.min(estBf+1,20).toFixed(1)+'%';
+  } else { $('predBodyFat').textContent='—'; }
+
+  const info=dayData(state.selectedDay);
+  const weekStart=(info.week-1)*7;
+  const weekDays=Array.from({length:7},(_,x)=>weekStart+x).filter(i=>i<DAYS);
+  const mealDone=weekDays.reduce((a,i)=>a+state.days[i].meals.filter(m=>m.done).length,0);
+  const mealTotal=weekDays.reduce((a,i)=>a+state.days[i].meals.length,0);
+  const habitHits=weekDays.reduce((a,i)=>{
+    const d=state.days[i];
+    const sleepOk=(Number(d.habit.sleep)||0)>=7 ? 1:0;
+    const waterOk=(Number(d.habit.water)||0)>=2.5 ? 1:0;
+    const stepsOk=(Number(d.habit.steps)||0)>=8000 ? 1:0;
+    return a+sleepOk+waterOk+stepsOk;
+  },0);
+  const habitTotal=weekDays.length*3;
+  const loggedSets=weekDays.reduce((a,i)=>a+state.days[i].exercises.reduce((b,ex)=>b+ex.sets.filter(s=>s.weight||s.reps).length,0),0);
+  const score=Math.round(((mealTotal?mealDone/mealTotal:0)*0.45 + (habitTotal?habitHits/habitTotal:0)*0.35 + Math.min(loggedSets/40,1)*0.20)*100);
+
+  let progression='Log two weeks of comparable lifts to unlock suggestions.';
+  const d=state.days[state.selectedDay];
+  const bestLift=d.exercises.find(ex=>ex.sets.filter(s=>s.weight && s.reps).length>=3);
+  if(bestLift){
+    const fullSets=bestLift.sets.filter(s=>Number(s.reps)>=10 && Number(s.weight)>0).length;
+    const w=Number(bestLift.sets.find(s=>Number(s.weight)>0)?.weight||0);
+    if(fullSets>=3 && w>0) progression=`${bestLift.name}: try +2.5 kg next time if form felt strong.`;
+    else if(w>0) progression=`${bestLift.name}: keep load steady and add 1–2 reps first.`;
+  }
+
   $('predStartWeight').textContent = START_WEIGHT+' kg';
   $('predFinalWeight').textContent = Number.isFinite(projected) ? projected.toFixed(1)+' kg' : '—';
   $('predCoach').textContent = coach;
+  $('weekScore').textContent = score + '%';
+  $('progressionHint').textContent = progression;
+  $('currentModeLabel').textContent = state.mode === 'holiday' ? 'Holiday' : state.mode === 'ramp' ? 'Ramp-up' : 'Cut';
 }
 function renderSupps(){ const list=$('suppList'); list.innerHTML=''; SUPPS.forEach(([name,dose,timing])=>{ const d=document.createElement('div'); d.className='supp'; d.innerHTML=`<div class="h3">${name}</div><div class="small">Dose: ${dose}</div><div class="small muted">${timing}</div>`; list.appendChild(d); }); }
 function bindShare(){ $('shareReportBtn').onclick=async()=>{ const lines=['7-Week Fitness Dashboard Report', state.userName?`Client: ${state.userName}`:'', state.trainerName?`Trainer: ${state.trainerName}`:'', '', `Reminder note: ${state.reminder || '-'}`]; for(let i=0;i<WEEKS;i++){ const c=state.days[i*7].checkIn; lines.push(`Week ${i+1}: Weight ${c.weight||'-'} kg | Waist ${c.waist||'-'} cm`); } const text=lines.filter(Boolean).join('\n'); if(navigator.share){ try{ await navigator.share({title:'Fitness Dashboard Report',text}); return;}catch(e){} } dl('trainer-report.txt',text); };
@@ -268,8 +350,8 @@ function bindShare(){ $('shareReportBtn').onclick=async()=>{ const lines=['7-Wee
   $('exportBackupBtn').onclick=()=>dl('fitness-dashboard-backup.json', JSON.stringify(state,null,2), 'application/json');
   $('importBackup').onchange=async e=>{ try{ const parsed=JSON.parse(await e.target.files[0].text()); if(!parsed.days) throw new Error(); state=parsed; save(); $('importStatus').textContent='Data imported successfully.'; render(); }catch(err){ $('importStatus').textContent='Import failed. Use a valid exported backup.'; } };
 }
-function bindTopInputs(){ $('userName').oninput=e=>{ state.userName=e.target.value; save(); }; $('trainerName').oninput=e=>{ state.trainerName=e.target.value; save(); }; }
-function render(){ updateHeader(); renderDaySelect(); renderToday(); renderWeek(); renderProgress(); renderPrediction(); renderSupps(); }
+function bindTopInputs(){ $('userName').oninput=e=>{ state.userName=e.target.value; save(); }; $('trainerName').oninput=e=>{ state.trainerName=e.target.value; save(); }; const ms=$('modeSelect'); if(ms){ ms.value=state.mode || 'cut'; ms.onchange=e=>{ state.mode=e.target.value; save(); renderPrediction(); }; } }
+function render(){ updateHeader(); renderDaySelect(); renderToday(); renderWeek(); renderProgress(); renderPrediction(); renderSupps(); const ms=$('modeSelect'); if(ms) ms.value=state.mode || 'cut'; }
 renderTabs(); bindShare(); bindTopInputs(); render();
 if ('serviceWorker' in navigator) {
   const swCode = `self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));self.addEventListener('fetch',()=>{});`;
